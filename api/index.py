@@ -1,74 +1,61 @@
-# api/index.py
-
-from fastapi import FastAPI
-
-from pydantic import BaseModel
-
-from pathlib import Path
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 import json
-import numpy as np
+import math
 
 app = FastAPI()
 
-# Enable CORS for POST requests from any origin
-
-from fastapi.middleware.cors import CORSMiddleware
-
+# allow all origins (required)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
+    allow_credentials=True,
+    allow_methods=["POST"],
     allow_headers=["*"],
 )
 
-# Request body model
+# load dataset
+with open("q-vercel-latency.json") as f:
+    DATA = json.load(f)
 
-class RequestData(BaseModel):
-    regions: list[str]
-    threshold_ms: int
 
-# Load telemetry file
+def p95(values):
+    if not values:
+        return 0
+    values = sorted(values)
+    idx = math.ceil(0.95 * len(values)) - 1
+    return values[idx]
 
-DATA_FILE = Path(__file__).parent.parent / "q-vercel-latency.json"
-
-with open(DATA_FILE, "r") as f:
-    telemetry = json.load(f)
-
-# Optional GET route so visiting the URL in a browser works
-
-@app.get("/")
-def home():
-    return {"message": "Latency Analytics API is running"}
-
-# Required POST endpoint
 
 @app.post("/")
-def analyse(data: RequestData):
+async def analytics(request: Request):
+    body = await request.json()
 
-    result = {}
+    regions = body["regions"]
+    threshold = body["threshold_ms"]
 
-    for region in data.regions:
+    output = {}
 
-        rows = [
-            r for r in telemetry
-            if r["region"] == region
-        ]
+    for region in regions:
+        region_data = [x for x in DATA if x["region"] == region]
 
-        if not rows:
+        latencies = [x["latency_ms"] for x in region_data]
+        uptimes = [x["uptime_pct"] for x in region_data]
+
+        if len(latencies) == 0:
+            output[region] = {
+                "avg_latency": 0,
+                "p95_latency": 0,
+                "avg_uptime": 0,
+                "breaches": 0
+            }
             continue
 
-        latencies = [r["latency_ms"] for r in rows]
-        uptimes = [r["uptime_pct"] for r in rows]
-
-        result[region] = {
-            "avg_latency": round(sum(latencies) / len(latencies), 2),
-            "p95_latency": round(float(np.percentile(latencies, 95)), 2),
-            "avg_uptime": round(sum(uptimes) / len(uptimes), 2),
-            "breaches": sum(
-                1 for latency in latencies
-                if latency > data.threshold_ms
-            )
+        output[region] = {
+            "avg_latency": sum(latencies) / len(latencies),
+            "p95_latency": p95(latencies),
+            "avg_uptime": sum(uptimes) / len(uptimes),
+            "breaches": len([x for x in latencies if x > threshold])
         }
 
-    return result
+    return output
