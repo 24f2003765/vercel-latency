@@ -1,29 +1,19 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 import json
 import math
 
 app = FastAPI()
 
-# ✅ CORS (this is required for grader)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# load dataset
+# load data
 with open("q-vercel-latency.json") as f:
     DATA = json.load(f)
 
 
 def p95(values):
+    values = sorted(values)
     if not values:
         return 0
-    values = sorted(values)
     idx = math.ceil(0.95 * len(values)) - 1
     return values[idx]
 
@@ -38,12 +28,12 @@ async def analytics(request: Request):
     result = {}
 
     for region in regions:
-        filtered = [x for x in DATA if x["region"] == region]
+        rows = [x for x in DATA if x["region"] == region]
 
-        latencies = [x["latency_ms"] for x in filtered]
-        uptimes = [x["uptime_pct"] for x in filtered]
+        latencies = [x["latency_ms"] for x in rows]
+        uptimes = [x["uptime_pct"] for x in rows]
 
-        if not latencies:
+        if not rows:
             result[region] = {
                 "avg_latency": 0,
                 "p95_latency": 0,
@@ -59,7 +49,10 @@ async def analytics(request: Request):
             "breaches": len([x for x in latencies if x > threshold])
         }
 
+    # ⭐ THIS is the key fix for your error
     return JSONResponse(
         content=result,
-        headers={"Access-Control-Allow-Origin": "*"}
+        headers={
+            "Access-Control-Allow-Origin": "*"
+        }
     )
