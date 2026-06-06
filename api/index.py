@@ -1,11 +1,10 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 import json
 import math
 
 app = FastAPI()
 
-# load data
 with open("q-vercel-latency.json") as f:
     DATA = json.load(f)
 
@@ -49,9 +48,10 @@ async def analytics(request: Request):
             "breaches": len([x for x in latencies if x > threshold])
         }
 
-    # ⭐ THIS is the key fix for your error
-    return JSONResponse(
-        content=result,
+    # ⭐ CRITICAL: explicit CORS header here
+    return Response(
+        content=json.dumps(result),
+        media_type="application/json",
         headers={
             "Access-Control-Allow-Origin": "*"
         }
