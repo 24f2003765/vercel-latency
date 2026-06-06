@@ -1,11 +1,10 @@
 from fastapi import FastAPI, Request
 from starlette.responses import Response
 import json
-import math
 
 app = FastAPI()
 
-# CORS headers (as required by grader)
+# CORS headers (required by grader)
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
@@ -18,12 +17,23 @@ with open("q-vercel-latency.json") as f:
     DATA = json.load(f)
 
 
+# ✅ correct percentile (INTERPOLATION method)
 def p95(values):
     values = sorted(values)
-    if not values:
+    n = len(values)
+
+    if n == 0:
         return 0
-    idx = math.ceil(0.95 * len(values)) - 1
-    return values[idx]
+
+    rank = 0.95 * (n - 1)
+    lower = int(rank)
+    upper = lower + 1
+
+    if upper >= n:
+        return values[lower]
+
+    weight = rank - lower
+    return values[lower] * (1 - weight) + values[upper] * weight
 
 
 @app.options("/")
