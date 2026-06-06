@@ -1,20 +1,10 @@
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import json
 import math
 
 app = FastAPI()
 
-# allow all origins (required)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["POST"],
-    allow_headers=["*"],
-)
-
-# load dataset
 with open("q-vercel-latency.json") as f:
     DATA = json.load(f)
 
@@ -42,7 +32,7 @@ async def analytics(request: Request):
         latencies = [x["latency_ms"] for x in region_data]
         uptimes = [x["uptime_pct"] for x in region_data]
 
-        if len(latencies) == 0:
+        if not latencies:
             output[region] = {
                 "avg_latency": 0,
                 "p95_latency": 0,
@@ -58,4 +48,10 @@ async def analytics(request: Request):
             "breaches": len([x for x in latencies if x > threshold])
         }
 
-    return output
+    # 🔥 IMPORTANT: manually attach CORS header
+    return JSONResponse(
+        content=output,
+        headers={
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
