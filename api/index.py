@@ -1,10 +1,7 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 import json
 import math
 
-app = FastAPI()
-
+# load data once
 with open("q-vercel-latency.json") as f:
     DATA = json.load(f)
 
@@ -17,9 +14,20 @@ def p95(values):
     return values[idx]
 
 
-@app.post("/")
-async def analytics(request: Request):
-    body = await request.json()
+def handler(request):
+    # CORS preflight (IMPORTANT)
+    if request.method == "OPTIONS":
+        return (
+            "",
+            200,
+            {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+            },
+        )
+
+    body = request.get_json()
 
     regions = body["regions"]
     threshold = body["threshold_ms"]
@@ -48,10 +56,11 @@ async def analytics(request: Request):
             "breaches": len([x for x in latencies if x > threshold])
         }
 
-    # 🔥 IMPORTANT: manually attach CORS header
-    return JSONResponse(
-        content=output,
-        headers={
+    return (
+        json.dumps(output),
+        200,
+        {
+            "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*"
-        }
+        },
     )
