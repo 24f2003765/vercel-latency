@@ -1,7 +1,21 @@
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import json
 import math
 
-# load data once
+app = FastAPI()
+
+# ✅ CORS (this is required for grader)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# load dataset
 with open("q-vercel-latency.json") as f:
     DATA = json.load(f)
 
@@ -14,34 +28,23 @@ def p95(values):
     return values[idx]
 
 
-def handler(request):
-    # CORS preflight (IMPORTANT)
-    if request.method == "OPTIONS":
-        return (
-            "",
-            200,
-            {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type",
-            },
-        )
-
-    body = request.get_json()
+@app.post("/")
+async def analytics(request: Request):
+    body = await request.json()
 
     regions = body["regions"]
     threshold = body["threshold_ms"]
 
-    output = {}
+    result = {}
 
     for region in regions:
-        region_data = [x for x in DATA if x["region"] == region]
+        filtered = [x for x in DATA if x["region"] == region]
 
-        latencies = [x["latency_ms"] for x in region_data]
-        uptimes = [x["uptime_pct"] for x in region_data]
+        latencies = [x["latency_ms"] for x in filtered]
+        uptimes = [x["uptime_pct"] for x in filtered]
 
         if not latencies:
-            output[region] = {
+            result[region] = {
                 "avg_latency": 0,
                 "p95_latency": 0,
                 "avg_uptime": 0,
@@ -49,18 +52,14 @@ def handler(request):
             }
             continue
 
-        output[region] = {
+        result[region] = {
             "avg_latency": sum(latencies) / len(latencies),
             "p95_latency": p95(latencies),
             "avg_uptime": sum(uptimes) / len(uptimes),
             "breaches": len([x for x in latencies if x > threshold])
         }
 
-    return (
-        json.dumps(output),
-        200,
-        {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        },
+    return JSONResponse(
+        content=result,
+        headers={"Access-Control-Allow-Origin": "*"}
     )
